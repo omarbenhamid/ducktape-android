@@ -160,7 +160,7 @@ class ZiplineLoader internal constructor(
   suspend fun loadOrFallBack(
     applicationName: String,
     manifestUrl: String,
-    initializer: (Zipline) -> Unit = {}
+    initializer: (Zipline) -> Unit = {},
   ): Zipline {
     return try {
       createZiplineAndLoad(applicationName, manifestUrl, null, initializer)
@@ -192,6 +192,11 @@ class ZiplineLoader internal constructor(
       // Run caller lambda to validate and initialize the loaded code to confirm it works.
       initializer(zipline)
 
+      // Run the application after initializer has been run on Zipline engine.
+      manifest.mainFunction?.let { mainFunction ->
+        zipline.runMainFunction(manifest.mainModuleId, mainFunction)
+      }
+
       // Pin stable application manifest after a successful load, and unpin all others.
       fetchers.pin(applicationName, manifest)
 
@@ -208,7 +213,7 @@ class ZiplineLoader internal constructor(
     applicationName: String,
     manifestUrlFlow: Flow<String>,
     pollingInterval: Duration,
-    initializer: (Zipline) -> Unit,
+    initializer: (Zipline) -> Unit = {},
   ): Flow<Zipline> = manifestUrlFlow
     .rebounce(pollingInterval)
     .mapNotNull { url ->
@@ -349,5 +354,19 @@ class ZiplineLoader internal constructor(
     private const val APPLICATION_MANIFEST_FILE_NAME_SUFFIX = "manifest.zipline.json"
     fun getApplicationManifestFileName(applicationName: String) =
       "$applicationName.$APPLICATION_MANIFEST_FILE_NAME_SUFFIX"
+
+
+    /** Runs the entrypoint to launch the application. */
+    fun Zipline.runMainFunction(mainModuleId: String, mainFunction: String) {
+      quickJs.evaluate("require('$mainModuleId').$mainFunction", "zipline-main.js")
+    }
+
+
+    /** Runs the entrypoint to launch the application. */
+    fun Zipline.runMainFunction(manifest: ZiplineManifest) {
+      manifest.mainFunction?.let { mainFunction ->
+        runMainFunction(manifest.mainModuleId, mainFunction)
+      }
+    }
   }
 }

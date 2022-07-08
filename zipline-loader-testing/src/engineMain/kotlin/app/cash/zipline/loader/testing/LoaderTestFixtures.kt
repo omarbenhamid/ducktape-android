@@ -52,8 +52,7 @@ class LoaderTestFixtures {
         dependsOnIds = listOf(),
       ),
     ),
-    mainModuleId = "./app.js",
-    mainFunction = "zipline.ziplineMain()",
+    mainFunction = "zipline.ziplineMain()"
   )
 
   val manifestWithRelativeUrlsJsonString = Json.encodeToString(manifestWithRelativeUrls)
@@ -107,17 +106,56 @@ class LoaderTestFixtures {
           sha256 = seedFileSha256,
         )
       ),
-      mainModuleId = "./app.js",
-      mainFunction = "zipline.ziplineMain()",
+      mainFunction = "zipline.ziplineMain()"
     )
 
-    fun createJs(seed: String) = """
-      |globalThis.log = globalThis.log || "";
-      |globalThis.log += "$seed loaded\n"
-      |""".trimMargin()
+    // TODO make these real like the examples in LoadJsModuleTest so they load
+    fun createJs(seed: String) = jsBoilerplate(
+      seed = seed,
+      loadBody = """
+              globalThis.log = globalThis.log || "";
+              globalThis.log += "$seed loaded\n";
+            """.trimIndent(),
+      mainBody = """
+              globalThis.mainLog = globalThis.mainLog || "";
+              globalThis.mainLog += "$seed loaded\n";
+            """.trimIndent()
+    )
 
-    fun createFailureJs(seed: String) = """
-      |throw Error('$seed');
-      |""".trimMargin()
+    fun createFailureJs(seed: String) = jsBoilerplate(
+      seed = seed,
+      loadBody = "throw Error('$seed');",
+      mainBody = "throw Error('$seed');"
+    )
+
+    private fun jsBoilerplate(seed: String, loadBody: String, mainBody: String) = """
+      (function (root, factory) {
+        if (typeof define === 'function' && define.amd)
+          define(['exports'], factory);
+        else if (typeof exports === 'object')
+          factory(module.exports);
+        else
+          root.zipline_main = factory(typeof zipline_main === 'undefined' ? {} : zipline_main);
+      }(this, function (_) {
+         function ziplineMain() {
+           $mainBody
+         }
+         //region block: exports
+         function ${'$'}jsExportAll${'$'}(_) {
+           // export global value for module name for easier test manipulation
+           globalThis.seed = '$seed';
+
+           // run test body code
+           $loadBody
+
+           // export scoped main function
+           var ${'$'}zipline = _.zipline || (_.zipline = {});
+           ${'$'}zipline.ziplineMain = ziplineMain;
+         }
+         ${'$'}jsExportAll${'$'}(_);
+         //endregion
+         return _;
+      }));
+      """.trimIndent()
   }
 }
